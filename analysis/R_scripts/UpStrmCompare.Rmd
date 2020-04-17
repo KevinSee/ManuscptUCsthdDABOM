@@ -1,0 +1,621 @@
+---
+title: "Upstream Arrays Effect on DABOM"
+author: "Kevin See"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output:
+  html_document:
+    collapsed: yes
+    fig_caption: yes
+    fig_height: 8
+    fig_width: 8
+    smooth_scroll: yes
+    theme: cerulean
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    fig_caption: yes
+    fig_height: 6
+    fig_width: 6
+    toc: yes
+csl: /Users/kevin/Dropbox/Bibliography/StyleFiles/ecology.csl
+bibliography:
+- /Users/kevin/Dropbox/Bibliography/Research.bib
+- /Users/kevin/Dropbox/Bibliography/SoftwareCitations.bib
+---
+
+```{r intro_stuff, echo = FALSE, message=FALSE, warning=FALSE, results = 'hide'}
+# setwd('analysis')
+library(knitr)
+# set some default options for code chunks
+opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+
+library(pander)
+panderOptions('missing', '--')
+
+library(captioner)
+fig_num = captioner()
+tab_num = captioner(prefix = 'Table')
+```
+
+```{r}
+# load needed libraries
+library(tidyverse)
+library(ggrepel)
+library(DABOM)
+library(STADEM)
+library(msm)
+# library(gridExtra)
+library(ggpubr)
+library(WriteXLS)
+
+theme_set(theme_bw())
+
+```
+
+```{r}
+# set species
+spp = 'Steelhead'
+
+# define some other patches in the model to look at for escapement
+otherBoxes = c('TUM_bb', 'past_TUM', 'LWE_bb', 'past_LWE', 'past_ENL', 'ENL_bb', 'MRC_bb', 'OKL_bb', 'past_OKL')
+
+# data.frame of lower and upper sites (upper sites turned "off")
+pairedSites = tibble(Lower = c('NAL',
+                               'CHL',
+                               'PES',
+                               'ICL',
+                               'ICL',
+                               'MRW',
+                               'CRW',
+                               'SA1',
+                               'OMK',
+                               'ENA',
+                               'ENA',
+                               'ENA',
+                               'ZSL',
+                               'ZSL',
+                               'ZSL'),
+                     Upper = c('NAU', 
+                               'CHU',
+                               'PEU',
+                               'ICM',
+                               'ICU',
+                               'WFC',
+                               'CRU',
+                               'SA0',
+                               'OBF',
+                               'ENM', 
+                               'ENS',
+                               'ENF',
+                               'TON',
+                               'NMC',
+                               'OKC'))
+```
+
+```{r, model_comps}
+
+lowNodeDetList = vector('list', 2)
+names(lowNodeDetList) = c('2016', '2017')
+lowNodeFishList = capHistList = lowNodeDetList
+
+# which year? 2016 or 2017
+# yr = 2017
+for(yr in 2016:2017) {
+  #-----------------------------------------------------------------
+  # load results, using missing upstream detections
+  #-----------------------------------------------------------------
+  load(paste0('../modelFits/PRA_', spp, '_', yr, '_DABOM_NoUppSites.rda'))
+  
+  # detection probabilities
+  detect_miss = summariseDetectProbs(dabom_mod, proc_list$ProcCapHist)
+  
+  # cummulative movement probabilities
+  trans_miss = compileTransProbs_PRA(dabom_mod)
+  
+  transSumm_miss = trans_miss %>%
+    group_by(Origin, param) %>%
+    summarise(mean = mean(value),
+              median = median(value),
+              mode = estMode(value),
+              sd = sd(value),
+              skew = moments::skewness(value),
+              kurtosis = moments::kurtosis(value),
+              lowerCI = coda::HPDinterval(coda::as.mcmc(value))[,1],
+              upperCI = coda::HPDinterval(coda::as.mcmc(value))[,2]) %>%
+    mutate_at(vars(mean, median, mode, sd, matches('CI$')),
+              list(~ ifelse(. < 0, 0, .))) %>%
+    ungroup()
+  
+  #-----------------------------------------------------------------
+  # load results, using all detections
+  #-----------------------------------------------------------------
+  load(paste0('../modelFits/PRA_', spp, '_', yr, '_DABOM.rda'))
+  
+  capHistList[[as.character(yr)]] = proc_list$ProcCapHist
+  
+  # detection probabilities
+  detect_all = summariseDetectProbs(dabom_mod, proc_list$ProcCapHist)
+  
+  # cummulative movement probabilities
+  trans_all = compileTransProbs_PRA(dabom_mod)
+  
+  transSumm_all = trans_all %>%
+    group_by(Origin, param) %>%
+    summarise(mean = mean(value),
+              median = median(value),
+              mode = estMode(value),
+              sd = sd(value),
+              skew = moments::skewness(value),
+              kurtosis = moments::kurtosis(value),
+              lowerCI = coda::HPDinterval(coda::as.mcmc(value))[,1],
+              upperCI = coda::HPDinterval(coda::as.mcmc(value))[,2]) %>%
+    mutate_at(vars(mean, median, mode, sd, matches('CI$')),
+              list(~ ifelse(. < 0, 0, .))) %>%
+    ungroup()
+  
+  #-----------------------------------------------------------------
+  # compare detection probability estimates and precision
+  #-----------------------------------------------------------------
+  lowNodeComp = pairedSites %>%
+    select(Lower) %>%
+    distinct() %>%
+    split(list(.$Lower)) %>%
+    map_df(.id = 'LowerSite',
+           .f = function(x) {
+             detect_all %>%
+               filter(grepl(x$Lower[1], Node)) %>%
+               mutate(source = 'All') %>%
+               bind_rows(detect_miss %>%
+                           filter(grepl(x$Lower[1], Node)) %>%
+                           mutate(source = 'Miss'))
+           }) %>%
+    arrange(LowerSite, Node, source)
+  
+  uppStrmDetects = pairedSites %>%
+    split(list(.$Lower)) %>%
+    map_df(.id = 'LowerSite',
+           .f = function(x) {
+             proc_list$ProcCapHist %>%
+               left_join(proc_list$NodeOrder %>%
+                           select(Node, NodeSite)) %>%
+               filter(NodeSite %in% x$Upper) %>%
+               summarise(upTags = n_distinct(TagID))
+           })
+  
+  lowNodeDetList[[as.character(yr)]] = lowNodeComp %>%
+    left_join(uppStrmDetects)
+  
+  #-----------------------------------------------------------------
+  # compare transition probability estimates and precision
+  #-----------------------------------------------------------------
+  lowNodeTrans = pairedSites %>%
+    select(Lower) %>%
+    distinct() %>%
+    split(list(.$Lower)) %>%
+    map_df(.id = 'LowerSite',
+           .f = function(x) {
+             transSumm_all %>%
+               filter(grepl(x$Lower[1], param),
+                      grepl('^past', param)) %>%
+               mutate(source = 'All') %>%
+               bind_rows(transSumm_miss %>%
+                           filter(grepl(x$Lower[1], param),
+                                  grepl('^past', param)) %>%
+                           mutate(source = 'Miss'))
+           }) %>%
+    bind_rows(transSumm_all %>%
+                filter(param %in% otherBoxes) %>%
+                mutate(LowerSite = param,
+                       source = 'All') %>%
+                bind_rows(transSumm_miss %>%
+                            filter(param %in% otherBoxes) %>%
+                            mutate(LowerSite = param,
+                                   source = 'Miss'))) %>%
+    arrange(LowerSite, param, Origin, source)
+  
+  #-----------------------------------------------------------------
+  # Estimate fish and compared differences
+  #-----------------------------------------------------------------
+  # total escapement past Priest
+  # window count
+  totWinCnt = getWindowCounts(dam = 'PRD',
+                              spp = 'Steelhead',
+                              start_date = paste0(yr-1, '0601'),
+                              end_date = paste0(yr, '0531')) %>%
+    summarise_at(vars(win_cnt),
+                 list(sum)) %>%
+    as.matrix() %>%
+    as.integer()
+  
+  # reascension data
+  reascData = queryPITtagData(damPIT = 'PRA',
+                              spp = 'Steelhead',
+                              start_date = paste0(yr-1, '0601'),
+                              end_date = paste0(yr, '0531'))
+  
+  # adjust for re-ascension and origin
+  totEscape = reascData %>%
+    mutate(SpawnYear = yr,
+           TagIDAscentCount = ifelse(is.na(TagIDAscentCount),
+                                     0, TagIDAscentCount),
+           ReAscent = ifelse(TagIDAscentCount > 1, T, F)) %>%
+    group_by(Species, SpawnYear, Date) %>%
+    summarise(tot_tags = n_distinct(TagID),
+              reascent_tags = n_distinct(TagID[ReAscent])) %>%
+    ungroup() %>%
+    group_by(Species, SpawnYear) %>%
+    summarise_at(vars(matches('tags')),
+                 list(sum),
+                 na.rm = T) %>%
+    ungroup() %>%
+    mutate(reascRate = reascent_tags / tot_tags,
+           reascRateSE = sqrt(reascRate * (1 - reascRate) / tot_tags),
+           totWinCnt = totWinCnt,
+           adjWinCnt = totWinCnt * (1 - reascRate),
+           adjWinCntSE = totWinCnt * reascRateSE) %>%
+    bind_cols(bio_df %>%
+                group_by(Origin) %>%
+                summarise(nTags = n_distinct(TagID)) %>%
+                spread(Origin, nTags,
+                       fill = as.integer(0)) %>%
+                ungroup() %>%
+                mutate(propW = W / (W + H),
+                       propH = 1 - propW,
+                       propOrgSE = sqrt((propW * (1 - propW)) / (W + H))))
+  
+  # totEscape %>%
+  #   mutate(alpha_reasc = ((reascRate) / adjWinCntSE^2 - 1 / (1 - reascRate)) * (1 - reascRate)^2,
+  #          beta_reasc = alpha_reasc * (1 / reascRate),
+  #          alpha_W = ((1 - propW) / propOrgSE^2 - 1 / propW) * propW^2,
+  #          beta_W = alpha_W * (1 / propW - 1)) %>%
+  #   select(Species, SpawnYear, totWinCnt, alpha_reasc:beta_W)
+  
+  orgEscapeTmp = totEscape %>%
+    mutate(Hescp = propH * adjWinCnt,
+           HescpSE = deltamethod(~ x1 * x2,
+                                 mean = c(propH, adjWinCnt),
+                                 cov = diag(c(propOrgSE, adjWinCntSE)^2))) %>%
+    mutate(Wescp = propW * adjWinCnt,
+           WescpSE = deltamethod(~ x1 * x2,
+                                 mean = c(propW, adjWinCnt),
+                                 cov = diag(c(propOrgSE, adjWinCntSE)^2))) %>%
+    select(Species, SpawnYear, matches('escp'))
+  
+  orgEscape = orgEscapeTmp %>%
+    gather(var, value, -(Species:SpawnYear)) %>%
+    filter(!grepl('SE', var)) %>%
+    rename(Origin = var,
+           TotEscp = value) %>%
+    mutate(Origin = recode(Origin,
+                           'Hescp' = 'Hatchery',
+                           'Wescp' = 'Natural')) %>%
+    left_join(orgEscapeTmp %>%
+                gather(var, value, -(Species:SpawnYear)) %>%
+                filter(grepl('SE', var)) %>%
+                rename(Origin = var,
+                       TotEscpSE = value) %>%
+                mutate(Origin = recode(Origin,
+                                       'HescpSE' = 'Hatchery',
+                                       'WescpSE' = 'Natural')))
+  
+  lowNodeFish = lowNodeTrans %>%
+    select(LowerSite, source, Origin, param, mean, sd) %>%
+    left_join(orgEscape) %>%
+    rowwise() %>%
+    mutate(Est = mean * TotEscp,
+           SE = deltamethod(~ x1 * x2,
+                            mean = c(mean, TotEscp),
+                            cov = diag(c(sd, TotEscpSE)^2))) %>%
+    ungroup() %>%
+    select(Species, SpawnYear, Origin, source, LowerSite, Est, SE) %>%
+    mutate(CV = SE / Est) %>%
+    distinct()
+  
+  lowNodeFishList[[as.character(yr)]] = lowNodeFish %>%
+    left_join(uppStrmDetects)
+}
+
+capHist = capHistList %>%
+  map_df(.id = 'SpawnYear',
+         .f = identity)
+
+lowNodeDet = lowNodeDetList %>%
+  map_df(.id = 'SpawnYear',
+         .f = identity)
+
+lowNodeFish = lowNodeFishList %>%
+  map_df(.id = NULL,
+         .f = identity)
+
+```
+
+```{r, eval = F}
+lowNodeFish %>%
+  select(SpawnYear, Origin,
+         LowerSite,
+         source,
+         Est) %>%
+  spread(source, Est) %>%
+  mutate(Diff = All - Miss) %>%
+  mutate(Param = 'Escapement') %>%
+  select(Param, SpawnYear:LowerSite, Diff)
+
+lowNodeComp %>%
+  left_join(uppStrmDetects) %>%
+  # filter one node out because n_tags diff between All and Miss
+  filter(Node != 'PESA0') %>%
+  select(LowerSite,
+         Node,
+         upTags,
+         source,
+         detect = median) %>%
+  spread(source, detect) %>%
+  # mutate(Diff = All - Miss) %>%
+  mutate(Diff = (All - Miss) / All) %>%
+  mutate(Param = 'Detection',
+         SpawnYear = yr) %>%
+  select(Param, SpawnYear, Node, upTags, LowerSite, Diff) %>%
+  arrange(LowerSite, Node) %>%
+  group_by(LowerSite) %>%
+  mutate(node = 1:n()) %>%
+  ungroup() %>%
+  select(-Node) %>%
+  spread(node, Diff)
+
+```
+
+```{r captions}
+sites_tab = tab_num('sites_tab',
+                    'Lower and upper sites in this study.')
+
+detEst_fig = fig_num('detEst_fig',
+                      'Estimates of detection probabilities at the lower site arrays with and without including detections at upstream sites.')
+
+detSE_fig = fig_num('detSE_fig',
+                      'Estimates of detection probability standard errors at the lower site arrays with and without including detections at upstream sites.')
+
+chl_tab = tab_num('chl_tab',
+                  'Frequency of detection histories from the lower and upper arrays at CHL, and any detections at CHU.')
+
+escpEst_fig = fig_num('escpEst_fig',
+                      'Estimates of escapement past the lower site arrays with and without including detections at upstream sites.')
+
+detEsc_fig = fig_num('detEsc_fig',
+                     'Relative differences in detection probability estimates plotted against relative differences in escapement estimates.')
+```
+
+
+# Goal
+
+We wanted to test the effects of removing upstream PIT tag antenna sites on escapement estimates generated from the **D**am **A**dult **B**ranch **O**ccupancy **M**odel (DABOM). The hypothesis is that if the two arrays at a lower site are not actually independent, then estimates of detection probability at the lower site will be biased high if the upper site is removed, which will lead to lower estimates of escapement in that tributary, and subsequently higher estimates of escapement to the mainstem area below that trib. The reasoning is that if the two arrays are not independent, fish that slip past the lower array undetected may be more likely to slip past the upper array undetected. If these fish are not detected at the upper site (because it is not there), those missed detections at the lower site will not be included in the estimation of detection probability at the lower site, because it's unclear if that fish actually crossed that lower site. 
+
+# Methods
+
+We used two years of data, 2016 and 2017, from steelhead tagged at Priest Rapids dam. Those two years were chosen to represent a fairly high escapement year, and a fairly low one. We ran the DABOM model twice for each year, once using all detection sites, and once after removing detections from a selected set of upstream sites (`r tab_num('sites_tab', display = 'c')`). We then compared estimates of detection probability and escapement, as well as the associated uncertainty. We removed any lower sites from the results that ended up with fixed estimates of detection probability (either 0% or 100%) after removing upstream detections, due to no detections at one of the lower arrays. 
+
+`r tab_num('sites_tab')`
+
+```{r upperSite_table}
+pairedSites %>%
+  pander()
+```
+
+# Results
+
+## Detection Probabliity
+
+We found that at most sites, removing the upstream site would lead to higher estimates of detection probability (`r fig_num('detEst_fig', display = 'c')`) as well as less precise estimates or higher standard errors (`r fig_num('detSE_fig', display = 'c')`). The one exception to this general finding was the lower site on the Chiwawa, CHL, which resulted in lower estimates of detection probability for both arrays across both years when detections at the upstream site, CHU, were removed. 
+
+One interesting note about detections at CHL: across both years, there were 26 tags detected at either CHL or CHU, but only one of them was detected on both the lower and upper array at CHL. 
+
+```{r detect_est_figure, fig.cap=fig_num('detEst_fig')}
+lowNodeDet %>%
+  filter(sd > 0) %>%
+  select(SpawnYear, LowerSite, Node, upTags, source, median) %>%
+  spread(source, median) %>%
+  filter(upTags > 0) %>%
+  mutate(pos = ifelse(grepl('A0$', Node),
+                      'Up',
+                      'Down')) %>%
+  ggplot(aes(x = All,
+             y = Miss)) +
+  geom_point(aes(color = pos,
+                 size = upTags,
+                 shape = SpawnYear)) +
+  scale_shape_manual(values = c('2016' = 1,
+                                '2017' = 19)) +
+  geom_abline(linetype = 2) +
+  geom_text_repel(aes(label = LowerSite),
+                  size = 3) +
+  labs(x = 'With Upstream Site',
+       y = 'No Upstream Site',
+       color = 'Array Position',
+       size = 'Upstream\nTags',
+       shape = 'Year',
+       title = 'Detection Probability At Lower Site')
+```
+
+```{r detect_se_figure, fig.cap=fig_num('detSE_fig')}
+lowNodeDet %>%
+  filter(sd > 0) %>%
+  select(SpawnYear, LowerSite, Node, upTags, source, sd) %>%
+  spread(source, sd) %>%
+  filter(upTags > 0) %>%
+  mutate(pos = ifelse(grepl('A0$', Node),
+                      'Up',
+                      'Down')) %>%
+  ggplot(aes(x = All,
+             y = Miss)) +
+  geom_point(aes(color = pos,
+                 size = upTags,
+                 shape = SpawnYear)) +
+  scale_shape_manual(values = c('2016' = 1,
+                                '2017' = 19)) +
+  geom_abline(linetype = 2) +
+  geom_text_repel(aes(label = LowerSite),
+                  size = 3) +
+  labs(x = 'With Upstream Site',
+       y = 'No Upstream Site',
+       color = 'Array Position',
+       size = 'Upstream\nTags',
+       shape = 'Year',
+       title = 'Detection Probability SE At Lower Site')
+
+```
+
+`r tab_num('chl_tab')`
+
+```{r CHL_table}
+capHist %>%
+  mutate(Node = recode(Node,
+                       'CHUB0' = 'CHU',
+                       'CHUA0' = 'CHU')) %>%
+  filter(Node %in% c('CHLB0', 'CHLA0', 'CHU') ) %>%
+  filter(UserProcStatus) %>%
+  select(SpawnYear, TagID, Node, seen) %>%
+  distinct() %>%
+  spread(Node, seen, 
+         fill = 0) %>%
+  group_by(SpawnYear, CHLB0, CHLA0, CHU) %>%
+  summarise(freq = n_distinct(TagID)) %>%
+  ungroup() %>%
+  mutate_at(vars(CHLB0:CHU),
+            list(as.integer)) %>%
+  pander()
+
+
+# capHist %>%
+#   filter(Node %in% c('CHLB0', 'CHLA0') ) %>%
+#   filter(UserProcStatus) %>%
+#   select(SpawnYear, TagID, Node, seen) %>%
+#   distinct() %>%
+#   spread(Node, seen, 
+#          fill = 0) %>%
+#   group_by(SpawnYear, CHLB0, CHLA0) %>%
+#   summarise(freq = n_distinct(TagID)) %>%
+#   ungroup() %>%
+#   mutate_at(vars(CHLB0:CHLA0),
+#             list(as.integer))
+
+
+```
+
+## Escapement
+
+```{r escp_est_figure, fig.cap = fig_num('escpEst_fig')}
+lowNodeFish %>%
+  filter(LowerSite != 'PES') %>%
+  select(SpawnYear, LowerSite, Origin, upTags, source, Est) %>%
+  spread(source, Est) %>%
+  filter(upTags > 0) %>%
+  ggplot(aes(x = All,
+             y = Miss)) +
+  geom_point(aes(color = Origin,
+                 size = upTags,
+                 shape = as.factor(SpawnYear))) +
+  scale_shape_manual(values = c('2016' = 1,
+                                '2017' = 19)) +
+  scale_color_brewer(palette = 'Set1') +
+  geom_abline(linetype = 2) +
+  geom_text_repel(aes(label = LowerSite),
+                  size = 3) +
+  labs(x = 'With Upstream Site',
+       y = 'No Upstream Site',
+       color = 'Origin',
+       size = 'Upstream\nTags',
+       shape = 'Year',
+       title = 'Escapement Past Lower Site')
+```
+
+
+```{r detect_escape_fig, fig.cap = fig_num('detEsc_fig'), eval = F}
+relDiff_p = lowNodeDet %>%
+  select(SpawnYear, LowerSite, Node, upTags, source, median) %>%
+  group_by(SpawnYear, LowerSite, source) %>%
+  mutate(nodeNum = 1:n()) %>%
+  ungroup() %>%
+  select(-Node) %>%
+  spread(nodeNum, median,
+         fill = 0) %>%
+  filter(upTags > 0) %>%
+  mutate(detect = 1 - ( (1 - `1`) * (1 - `2`) ) ) %>%
+  select(-`1`, -`2`) %>%
+  spread(source, detect) %>%
+  rename(detectAll = All,
+         detectMiss = Miss) %>%
+  full_join(lowNodeFish %>%
+              mutate_at(vars(SpawnYear),
+                        list(as.character)) %>%
+              select(SpawnYear, LowerSite, Origin, upTags, source, escape = Est) %>%
+              spread(source, escape) %>%
+              rename(fishAll = All,
+                     fishMiss = Miss)) %>%
+  arrange(LowerSite, SpawnYear, Origin) %>%
+  mutate(detectPerc = (detectMiss - detectAll) / detectAll,
+         fishPerc = (fishMiss - fishAll) / fishAll) %>%
+  mutate_at(vars(detectPerc, fishPerc),
+            list(~ . * 100)) %>%
+  filter(upTags > 0) %>%
+  mutate(grp = paste(SpawnYear, Origin, sep = ' - ')) %>%
+  ggplot(aes(x = detectPerc,
+             y = fishPerc)) +
+  geom_vline(xintercept = 0,
+             linetype = 2) +
+  geom_hline(yintercept = 0,
+             linetype = 2) +
+  geom_smooth(method = lm,
+              color = 'black') +
+  # geom_point(aes(color = Origin,
+  #                size = upTags,
+  #                shape = SpawnYear)) +
+  # scale_shape_manual(values = c('2016' = 1,
+  #                               '2017' = 19)) +
+  # scale_color_brewer(palette = 'Set1') +
+  geom_point(aes(size = upTags,
+                 shape = grp)) +
+  scale_shape_manual(values = c('2016 - Hatchery' = 1,
+                                '2016 - Natural' = 19,
+                                '2017 - Hatchery' = 2,
+                                '2017 - Natural' = 17)) +
+  labs(x = 'Detection Difference (%)',
+       y = 'Escapement Difference (%)',
+       size = 'Upstream Tags',
+       shape = 'Year - Origin')
+
+relDiff_p +
+  geom_text_repel(aes(label = LowerSite),
+                  size = 3) +
+  labs(title = 'No Upstream Site - With Upstream Site')
+
+ggsave('../figures/RmUpStrm_RelDiff.pdf',
+       relDiff_p,
+       width = 8,
+       height = 8)
+
+# save a version compatible for the journal
+journ_p = relDiff_p +
+  theme(axis.title = element_text(size = 9),
+        axis.text = element_text(size = 7),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 7),
+        # legend.position = "bottom",
+        legend.direction = "vertical") +
+  theme(legend.position = "none")
+  # guides(shape = guide_legend(ncol = 2),
+  #        size = guide_legend(ncol = 3))
+
+ggsave('../figures/RmUpStrm_RelDiff.pdf',
+       journ_p,
+       dpi = 600,
+       width = 3,
+       height = 3)
+
+
+```
+
+# Discussion
+
+The assumption of indepedence at each of a sites's arrays may be violated in some cases. Most of the time removing the upstream site resulted in higher estimates of detection probability at the lower arrays (`r fig_num('detEst_fig', display = 'c')`), with less precision (`r fig_num('detSE_fig', display = 'c')`). As the detection probabilities rose, the escapement estimates shrunk, leading to estimates of escapement that are too low (`r fig_num('detEsc_fig', display = 'c')`). 
+
+The apparent exception to many of these conclusions was in the Chiwawa River, using site CHL and CHU. However, the detection histories at those sites were unusual (`r tab_num('chl_tab', display = 'c')`), and may warrant further investigation. Also, although the direction of bias in the detection probability was different at CHL, the effect on escapement was consistent with other sites: lower estimates of detection probability led to higher estimates of escapement. 

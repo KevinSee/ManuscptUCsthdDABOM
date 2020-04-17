@@ -1,15 +1,19 @@
 Package: ManuscptUCsthdDABOM
-Title: What the Package Does (One Line, Title Case)
+Title: Code and Data for Upper Columbia Steelhead Escapement Manuscript
 Version: 0.0.0.9000
-Authors@R: 
+Authors@R:
     person(given = "First",
            family = "Last",
            role = c("aut", "cre"),
            email = "first.last@example.com")
-Description: What the package does (one paragraph)
+Description: This package contains the code and data to run the escapement model behind the 2020 manuscript, "A Bayesian nested patch occupancy model to estimate steelhead movement and abundance".
 License: CCBY-4.0
 ByteCompile: true
 Encoding: UTF-8
 LazyData: true
 URL: https://github.com/KevinSee/ManuscptUCsthdDABOM
 BugReports: https://github.com/KevinSee/ManuscptUCsthdDABOM/issues
+Imports: bookdown,
+    here
+Suggests: devtools,
+    git2r
