@@ -11,7 +11,7 @@ install.packages(c('tidyverse', 'WriteXLS'))
 
 # to install PITcleanr package
 install.packages('devtools')
-devtools::install_github("KevinSee/PITcleanr", build_vignettes = TRUE)
+devtools::install_github("KevinSee/PITcleanr")
 #-----------------------------------------------------------------
 
 #-----------------------------------------------------------------
@@ -25,7 +25,8 @@ library(readxl)
 #-----------------------------------------------------------------
 # set species / year
 spp = 'Steelhead'
-yr = 2019
+# run for 2016 and 2017
+yr = 2016
 # start date is June 1 of the previous year
 startDate = paste0(yr - 1, '0601')
 
@@ -135,9 +136,6 @@ configuration = org_config %>%
          Node = ifelse(SiteID %in% c('SSC', '18N', 'MHB', 'M3R', 'MWF'),
                        'MRCA0',
                        Node),
-         # Node = ifelse(SiteID == 'TWISPW',
-         #               'TWRA0',
-         #               Node),
          Node = ifelse(SiteID == 'MSH' & AntennaID %in% c('02', '03'),
                        'MSHB0',
                        Node),
@@ -262,7 +260,7 @@ parent_child = createParentChildDf(site_df,
 
 # get raw observations from PTAGIS
 # These come from running a saved query on the list of tags to be used
-observations = read_csv(paste0('data/PTAGIS/UC_Sthd_', yr, '_CTH.csv'))
+observations = read_csv(paste0('analysis/data/raw_data/PTAGIS/UC_Sthd_', yr, '_CTH.csv'))
 
 # process the observations with PITcleanr
 proc_list = processCapHist_PRD(startDate = startDate,
@@ -273,7 +271,7 @@ proc_list = processCapHist_PRD(startDate = startDate,
                                site_df = site_df,
                                truncate = T,
                                save_file = F,
-                               file_name = paste0('data/PITcleanr/UC_', spp, '_', yr, '.xlsx'))
+                               file_name = paste0('analysis/data/derived_data/PITcleanr/UC_', spp, '_', yr, '.xlsx'))
 
 # what percentage of tags have some questionable observations that will need to be looked at?
 proc_list$ProcCapHist %>%
@@ -297,39 +295,54 @@ proc_list$NodeOrder = node_order
 
 # save some stuff
 save(spp, yr, startDate, site_list, site_df, configuration, parent_child, proc_list,
-     file = paste0('data/DABOMready/UC_', spp, '_', yr, '.rda'))
+     file = paste0('analysis/data/derived_data/DABOMready/UC_', spp, '_', yr, '.rda'))
 
 #-------------------------------------------
 # NEXT STEPS
 #-------------------------------------------
-# open that Excel file, and filter on the column UserProcStatus, looking for blanks. Fill in each row with TRUE or FALSE, depending on whether that observation should be kept or not. The column AutoProcStatus provides a suggestion, but the biologist's best expert judgement should be used. 
+# open that Excel file, and filter on the column UserProcStatus, looking for blanks. Fill in each row with TRUE or FALSE, depending on whether that observation should be kept or not. The column AutoProcStatus provides a suggestion, but the biologist's best expert judgement should be used.
 
 #-------------------------------------------
 # After receiving cleaned up file back...
 #-------------------------------------------
-load(paste0('data/DABOMready/UC_', spp, '_', yr, '.rda'))
+load(paste0('analysis/data/derived_data/DABOMready/UC_', spp, '_', yr, '.rda'))
 
-wdfw_clean_ch = read_excel(paste0('data/WDFW/UC_Steelhead_', yr, '.xlsx')) %>%
-  mutate_at(vars(TrapDate),
-            list(ymd)) %>%
-  mutate_at(vars(TrapDate),
-            list(as.POSIXct)) %>%
-  mutate_at(vars(TrapDate),
-            list(floor_date),
-            unit = 'day') %>%
-  mutate_at(vars(ObsDate:lastObsDate),
-            list(ymd_hms)) %>%
-  mutate_at(vars(Group),
-            list(as.factor)) %>%
-  mutate_at(vars(BranchNum, NodeOrder),
-            list(as.integer)) %>%
-  mutate_at(vars(UserComment),
-            list(as.character)) %>%
-  mutate_at(vars(AutoProcStatus, UserProcStatus, ValidPath),
-            list(as.logical))
+if(yr == 2016) {
+
+  wdfw_clean_ch = read_excel(paste0('analysis/data/raw_data/WDFW/UC_Steelhead_', yr, '.xlsx')) %>%
+    mutate_at(vars(TrapDate),
+              list(ymd)) %>%
+    mutate_at(vars(TrapDate),
+              list(as.POSIXct)) %>%
+    mutate_at(vars(TrapDate),
+              list(floor_date),
+              unit = 'day') %>%
+    mutate_at(vars(ObsDate:lastObsDate),
+              list(ymd_hms)) %>%
+    mutate_at(vars(Group),
+              list(as.factor)) %>%
+    mutate_at(vars(BranchNum, NodeOrder),
+              list(as.integer)) %>%
+    mutate_at(vars(UserComment),
+              list(as.character)) %>%
+    mutate_at(vars(AutoProcStatus, UserProcStatus, ValidPath),
+              list(as.logical))
+}
+
+if(yr == 2017) {
+  wdfw_clean_ch = read_excel(paste0('analysis/data/raw_data/WDFW/UC_Steelhead_', yr, '_BT.xlsx')) %>%
+    mutate_at(vars(matches('ProcStatus')),
+              funs(as.logical)) %>%
+    mutate_at(vars(TrapDate),
+              funs(ymd)) %>%
+    mutate_at(vars(matches('ObsDate')),
+              funs(ymd_hms)) %>%
+    mutate_at(vars(Group),
+              funs(as.factor))
+}
 
 proc_list$ProcCapHist = wdfw_clean_ch
 
 # save some stuff
 save(spp, yr, startDate, site_list, site_df, configuration, parent_child, proc_list,
-     file = paste0('data/DABOMready/UC_', spp, '_', yr, '.rda'))
+     file = paste0('analysis/data/derived_data/DABOMready/UC_', spp, '_', yr, '.rda'))
