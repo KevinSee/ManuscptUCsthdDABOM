@@ -81,9 +81,13 @@ Rtools (although it may already be installed). The latest version on
 Rtools can be found at <https://cran.r-project.org/bin/windows/Rtools/>
 
 Once `devtools` is successfully installed, use the following to install
-DABOM from GitHub:
+the version of DABOM used in this manuscript from GitHub:
 
     devtools::install_github("KevinSee/DABOM@v0.1.0")
+
+The latest version of DABOM code (which may not be back-compatible with
+the R scripts contained here), can be found at
+<https://github.com/KevinSee/DABOM>.
 
 DABOM requires the JAGS software (**J**ust **A**nother **G**ibbs
 **S**ampler). This can be downloaded here:
