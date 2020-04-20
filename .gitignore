@@ -1,3 +1,5 @@
 .Rproj.user
 .Rhistory
 .RData
+# old R script
+analysis/R_scripts/Run_DABOM_old.R
