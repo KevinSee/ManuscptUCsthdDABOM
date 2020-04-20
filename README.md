@@ -15,7 +15,7 @@ Our pre-print is online here:
 
 > Waterhouse, L., J. White, K. See, A. Murdoch, B. Semmens, (2020). *A
 > Bayesian nested patch occupancy model to estimate steelhead movement
-> and abundance*. Name of journal/book, Accessed 17 Apr 2020. Online at
+> and abundance*. Name of journal/book, Accessed 20 Apr 2020. Online at
 > <https://doi.org/xxx/xxx>
 
 ### How to cite
@@ -24,7 +24,7 @@ Please cite this compendium as:
 
 > K. See, (2020). *Compendium of R code and data for A Bayesian nested
 > patch occupancy model to estimate steelhead movement and abundance*.
-> Accessed 17 Apr 2020. Online at <https://doi.org/xxx/xxx>
+> Accessed 20 Apr 2020. Online at <https://doi.org/xxx/xxx>
 
 ### How to download or install
 
@@ -91,3 +91,16 @@ DABOM requires the JAGS software (**J**ust **A**nother **G**ibbs
 <https://sourceforge.net/projects/mcmc-jags/files/>
 
 Please download version \>= 4.0.0
+
+## Reproducing Results
+
+To reproduce the results from our manuscript, clone this repository and
+navigate to “`analysis/R_scripts`” and then run the following R scripts:
+
+  - `01_process_capture_histories.R`
+  - `02_run_DABOM.R`
+  - `03_summarise_results`
+
+The results from comparing multiple model runs using some upstream
+observation sites with runs without those sites can be seen by knitting
+together the Rmarkdown document, `04_upstrm_compare.Rmd`.
