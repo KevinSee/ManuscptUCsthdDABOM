@@ -635,6 +635,65 @@ ggarrange(plotlist = list(p1, p2),
          height = 8,
          dpi = 600)
 
+# another version
+dodge_pos = 0.9
+p3 = plotDf %>%
+  ggplot(aes(x = Branch,
+             y = value)) +
+  geom_violin(aes(fill = Origin),
+              scale = 'width',
+              draw_quantiles = 0.5,
+              position = position_dodge(width = dodge_pos)) +
+  # geom_boxplot(position = position_dodge(width = dodge_pos)) +
+  theme_bw() +
+  scale_fill_brewer(palette = 'Set1') +
+  theme(legend.position = c(0.75, 0.75),
+        panel.grid = element_blank(),
+        axis.text.x = element_text(angle = 45,
+                                   hjust = 1)) +
+  # scale_y_continuous(trans = 'log') +
+  labs(y = 'Estimated # Fish',
+       x = "Location")
+
+ggsave('analysis/figures/Figure5_v2.pdf',
+       p3,
+       width = 3,
+       height = 4,
+       dpi = 600)
+
+
+dodge_pos = 0.9
+plotDf %>%
+  ggplot(aes(x = Branch,
+             y = value)) +
+  geom_violin(aes(fill = Origin),
+              scale = 'width',
+              position = position_dodge(width = dodge_pos)) +
+  scale_fill_brewer(palette = 'Set1') +
+  geom_boxplot(aes(group = Origin),
+               position = position_dodge(width = dodge_pos)) +
+  theme_bw() +
+  theme(legend.position = 'none',
+        strip.text = element_text(size = 7)) +
+  facet_wrap(~ Branch,
+             scales = 'free',
+             # scales = 'free_x',
+             nrow = 2) +
+  labs(y = 'Estimated # Fish')
+
+
+plotDf %>%
+  ggplot(aes(x = value,
+             fill = Origin,
+             color = Origin)) +
+  # geom_density(alpha = 0.3) +
+  geom_histogram(alpha = 0.3) +
+  theme_bw() +
+  scale_fill_brewer(palette = 'Set1') +
+  scale_color_brewer(palette = 'Set1') +
+  facet_wrap(~ Branch,
+             scales = 'free')
+
 #-----------------------------------------------------------------
 # combine biological data with escapement estimates
 #-----------------------------------------------------------------
