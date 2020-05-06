@@ -600,16 +600,29 @@ plotDf = escape_post %>%
 #              nrow = 2) +
 #   labs(y = 'Estimated # Fish')
 
+# p1 = plotDf %>%
+#   ggplot(aes(x = Branch,
+#              y = value,
+#              fill = Origin)) +
+#   geom_boxplot() +
+#   theme_bw() +
+#   scale_fill_brewer(palette = 'Set1') +
+#   theme(legend.position = c(0.8, 0.8)) +
+#   theme(panel.grid = element_blank()) +
+#   labs(y = 'Estimated # Fish')
+
 p1 = plotDf %>%
   ggplot(aes(x = Branch,
-             y = value,
-             fill = Origin)) +
-  geom_boxplot() +
+             y = value)) +
+  geom_violin(aes(fill = Origin),
+              scale = 'width',
+              draw_quantiles = 0.5) +
   theme_bw() +
   scale_fill_brewer(palette = 'Set1') +
-  theme(legend.position = c(0.8, 0.8)) +
-  theme(panel.grid = element_blank()) +
-  labs(y = 'Estimated # Fish')
+  theme(legend.position = c(0.85, 0.85),
+        panel.grid = element_blank()) +
+  labs(y = 'Estimated # Fish',
+       x = "Location")
 
 p2 = plotDf %>%
   ggplot(aes(x = Branch,
@@ -623,37 +636,20 @@ p2 = plotDf %>%
   facet_wrap(~ Origin + Branch,
              scales = 'free',
              nrow = 2) +
-  labs(y = 'Estimated # Fish')
+  labs(y = 'Estimated # Fish',
+       x = "Location")
 
 ggarrange(plotlist = list(p1, p2),
           ncol = 1,
           nrow = 2,
           labels = 'AUTO') %>%
-  ggsave('analysis/figures/Figure5.pdf',
+  ggsave('analysis/figures/Figure5_v3.pdf',
          plot = .,
          width = 6,
          height = 8,
          dpi = 600)
 
-# another version
-dodge_pos = 0.9
-p3 = plotDf %>%
-  ggplot(aes(x = Branch,
-             y = value)) +
-  geom_violin(aes(fill = Origin),
-              scale = 'width',
-              draw_quantiles = 0.5,
-              position = position_dodge(width = dodge_pos)) +
-  # geom_boxplot(position = position_dodge(width = dodge_pos)) +
-  theme_bw() +
-  scale_fill_brewer(palette = 'Set1') +
-  theme(legend.position = c(0.75, 0.75),
-        panel.grid = element_blank(),
-        axis.text.x = element_text(angle = 45,
-                                   hjust = 1)) +
-  # scale_y_continuous(trans = 'log') +
-  labs(y = 'Estimated # Fish',
-       x = "Location")
+
 
 ggsave('analysis/figures/Figure5_v2.pdf',
        p3,
