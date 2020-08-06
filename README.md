@@ -11,14 +11,15 @@ This repository contains the data and code for our paper:
 
 > Waterhouse, L., J. White, K. See, A. Murdoch, B. Semmens, (2020). *A
 > Bayesian nested patch occupancy model to estimate steelhead movement
-> and abundance*. Ecological Applications <https://doi.org/xxx/xxx>
+> and abundance*. Ecological Applications
+> <https://doi.org/10.1002/eap.2202>
 
 Our pre-print is online here:
 
 > Waterhouse, L., J. White, K. See, A. Murdoch, B. Semmens, (2020). *A
 > Bayesian nested patch occupancy model to estimate steelhead movement
-> and abundance*. Name of journal/book, Accessed 20 Apr 2020. Online at
-> <https://doi.org/xxx/xxx>
+> and abundance*. Name of journal/book, Accessed 06 Aug 2020. Online at
+> <https://doi.org/10.1002/eap.2202>
 
 ### How to cite
 
@@ -26,7 +27,7 @@ Please cite this compendium as:
 
 > K. See, (2020). *Compendium of R code and data for A Bayesian nested
 > patch occupancy model to estimate steelhead movement and abundance*.
-> Accessed 20 Apr 2020. Online at <https://doi.org/xxx/xxx>
+> Accessed 06 Aug 2020. Online at <https://doi.org/10.1002/eap.2202>
 
 ### How to download or install
 
